@@ -48,16 +48,12 @@ fun quotedString(input: String): ParseResult<String> {
     var escaped = false
     var string = ""
     for (i in 1 until input.length) {
-        when (val c = input[i]) {
-            '"' -> {
-                if (!escaped) return Result.Ok(Pair(string, input.substring(i + 1)))
-                string += c
-                escaped = false
-            }
-            '\\' -> {
-                if (escaped) string += '\\'
-                escaped = !escaped
-            }
+        val c = input[i]
+        when {
+            c == '"' && !escaped ->
+                return Result.Ok(Pair(string, input.substring(i + 1)))
+            c == '\\' && !escaped ->
+                escaped = true
             else -> {
                 if (escaped) string += '\\'
                 escaped = false

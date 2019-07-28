@@ -1,0 +1,86 @@
+Parser Combinators Talk
+
+1. Intro
+    - primitive string operations
+    - regexs
+    - lex, yacc, JavaCC etc
+
+2. What is a parser?
+    - function from string to structured data
+    - "structure" implies not all strings are valid
+    - needs the possibility of failure
+    - Result<T> type
+
+3. What is the simplest parser we can think of?
+    - theLetterA
+    - implement first with simple Unit result
+    - write test
+    - discuss need for remaining string for combining parsers
+    - refactor result type to Pair<Unit, String>
+
+4. More interesting parsers
+    - string() amd integer()
+    - quotedString()
+    - test
+
+5. Take stock
+    - what have we so far?
+    - lots of repetition in result types
+    - add ParseResult<T> and Parser<T> type aliases
+    - refactor
+
+6. Combining Parsers
+    - what does it mean to combine parsers?
+    - discuss semantics of sequence
+    - what would a function that combines two parsers look like?
+    - start with signature
+    - note that params and return are all functions
+    - implement unrolled version
+    - add tests
+    - discuss patterns in unrolled code
+    - factor out inner `when` to ParseResult.map()
+    - note that ParseResult is acting as a Functor
+    - factor out outer `when` to ParseResult.flatMap()
+    - note that ParseResult is acting as a Monad
+    - discuss naming of flatMap()
+    - rerun tests
+
+7. Choice
+    - the other main combinator is choice
+    - both branches must yield the same type
+    - implement and add positive tests
+    - note that return values are the same for both branches
+    - discuss adding result data to `string()`
+    - add `Parser.retn()`
+    - discuss extension on function type
+    - modify test to use `retn()`
+    - add a failing test case with 'a or b' expect message
+    - implement and use `mapExpected`
+
+8. Other combinators
+    - before
+    - then
+    - between
+    - many
+    - sepBy
+
+9. Parsing JSON
+    - add JSON model
+    - add test case
+    - trivial cases: null, true, false, int, string
+    - start on array
+    - stub array item to start with; focus on sepBy, between
+    - we need the "full" json parser for items
+    - seems like a disaster but there's a simple fix
+    - ParserRef<T>
+    - object parser is similar
+    - finally add the full JSON parser
+    - remember to set ref
+
+10. Conclusion
+    - parsers are just functions
+    - with a few rules they are easy to combine
+    - separating lex and grammar stages
+    - error messages and source positions
+    - you can't debug this by stepping through
+    - debug by breaking down problems

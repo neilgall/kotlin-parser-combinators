@@ -13,33 +13,33 @@ sealed class JSON {
 class ParsersTests: StringSpec({
 
     "theLetterA" {
-        theLetterA("aaa") shouldBe Result.Ok(Pair(Unit, "aa"))
+        theLetterA("aaa") shouldBe Result.Ok(Unit, "aa")
         theLetterA("baa") shouldBe Result.Err<Pair<Unit, String>>("'a'", "baa")
     }
 
     "string" {
         val p = string("foo")
-        p("foobar") shouldBe Result.Ok(Pair(Unit, "bar"))
+        p("foobar") shouldBe Result.Ok(Unit, "bar")
         p("barfoo") shouldBe Result.Err<Pair<Unit, String>>("'foo'", "barfoo")
     }
 
     "integer" {
-        integer("123") shouldBe Result.Ok(Pair(123, ""))
-        integer("123foo") shouldBe Result.Ok(Pair(123, "foo"))
+        integer("123") shouldBe Result.Ok(123, "")
+        integer("123foo") shouldBe Result.Ok(123, "foo")
         integer("foo") shouldBe Result.Err<Pair<Int, String>>("an integer", "foo")
         integer("") shouldBe Result.Err<Pair<Int, String>>("an integer", "")
     }
 
     "quotedString" {
         quotedString("foo") shouldBe Result.Err<Pair<String, String>>("a quoted string", "foo")
-        quotedString("\"foo\"") shouldBe Result.Ok(Pair("foo", ""))
-        quotedString("\"foo\"bar") shouldBe Result.Ok(Pair("foo", "bar"))
-        quotedString("\"\"") shouldBe Result.Ok(Pair("", ""))
+        quotedString("\"foo\"") shouldBe Result.Ok("foo", "")
+        quotedString("\"foo\"bar") shouldBe Result.Ok("foo", "bar")
+        quotedString("\"\"") shouldBe Result.Ok("", "")
         quotedString("") shouldBe Result.Err<Pair<String, String>>("a quoted string", "")
     }
 
     "seq" {
-        seq(::theLetterA, ::theLetterA)("aab") shouldBe Result.Ok(Pair(Pair(Unit, Unit), "b"))
+        seq(::theLetterA, ::theLetterA)("aab") shouldBe Result.Ok(Pair(Unit, Unit), "b")
     }
 
     "choice" {
@@ -47,39 +47,39 @@ class ParsersTests: StringSpec({
             string("a").retn(1),
             string("b").retn(2)
         )
-        p("a") shouldBe Result.Ok(Pair(1, ""))
-        p("b") shouldBe Result.Ok(Pair(2, ""))
+        p("a") shouldBe Result.Ok(1, "")
+        p("b") shouldBe Result.Ok(2, "")
         p("c") shouldBe Result.Err<Pair<Int, String>>("'a' or 'b'", "c")
     }
 
     "before" {
         val foo = string("foo").retn(1)
         val bar = string("bar").retn(2)
-        foo.before(bar)("foobar") shouldBe Result.Ok(Pair(2, ""))
+        foo.before(bar)("foobar") shouldBe Result.Ok(2, "")
     }
 
     "then" {
         val foo = string("foo").retn(1)
         val bar = string("bar").retn(2)
-        foo.then(bar)("foobar") shouldBe Result.Ok(Pair(1, ""))
+        foo.then(bar)("foobar") shouldBe Result.Ok(1, "")
     }
 
     "between" {
         val p = ::integer.between(string("["), string("]"))
-        p("[123]") shouldBe Result.Ok(Pair(123, ""))
-        p("[123]foo") shouldBe Result.Ok(Pair(123, "foo"))
+        p("[123]") shouldBe Result.Ok(123, "")
+        p("[123]foo") shouldBe Result.Ok(123, "foo")
     }
 
     "many" {
-        ::theLetterA.many()("aaa") shouldBe Result.Ok(Pair(listOf(Unit, Unit, Unit), ""))
-        ::theLetterA.many()("aaab") shouldBe Result.Ok(Pair(listOf(Unit, Unit, Unit), "b"))
-        ::theLetterA.many()("") shouldBe Result.Ok(Pair(listOf<Unit>(), ""))
-        ::theLetterA.many()("bbb") shouldBe Result.Ok(Pair(listOf<Unit>(), "bbb"))
+        ::theLetterA.many()("aaa") shouldBe Result.Ok(listOf(Unit, Unit, Unit), "")
+        ::theLetterA.many()("aaab") shouldBe Result.Ok(listOf(Unit, Unit, Unit), "b")
+        ::theLetterA.many()("") shouldBe Result.Ok(listOf<Unit>(), "")
+        ::theLetterA.many()("bbb") shouldBe Result.Ok(listOf<Unit>(), "bbb")
     }
 
     "sepBy" {
-        ::integer.sepBy(string(","))("1,2,3,4") shouldBe Result.Ok(Pair(listOf(1,2,3,4), ""))
-        ::integer.sepBy(string(","))("1,2,3,4x") shouldBe Result.Ok(Pair(listOf(1,2,3,4), "x"))
+        ::integer.sepBy(string(","))("1,2,3,4") shouldBe Result.Ok(listOf(1,2,3,4), "")
+        ::integer.sepBy(string(","))("1,2,3,4x") shouldBe Result.Ok(listOf(1,2,3,4), "x")
     }
 
     "json" {
@@ -113,7 +113,7 @@ class ParsersTests: StringSpec({
             "array": [1,2,3],
             "objs": [{"a": true}, {"b": false}],
             "nothing": null
-        }""") shouldBe Result.Ok(Pair(
+        }""") shouldBe Result.Ok(
             JSON.Object(mapOf(
                 "foo" to JSON.String("bar"),
                 "number" to JSON.Number(123),
@@ -125,6 +125,6 @@ class ParsersTests: StringSpec({
                 "nothing" to JSON.Null
             )),
             ""
-        ))
+        )
     }
 })

@@ -1,5 +1,5 @@
 sealed class Result<T> {
-    data class Ok<T>(val value: T) : Result<T>()
+    data class Ok<T>(val value: T, val remaining: String) : Result<T>()
     data class Err<T>(val expected: String, val actual: String) : Result<T>()
 
     fun mapExpected(f: (String) -> String): Result<T> = when (this) {
@@ -8,23 +8,22 @@ sealed class Result<T> {
     }
 }
 
-typealias ParseResult<T> = Result<Pair<T, String>>
-typealias Parser<T> = (String) -> ParseResult<T>
+typealias Parser<T> = (String) -> Result<T>
 
-fun theLetterA(input: String): ParseResult<Unit> =
+fun theLetterA(input: String): Result<Unit> =
     if (input.isNotEmpty() && input[0] == 'a')
-        Result.Ok(Pair(Unit, input.substring(1)))
+        Result.Ok(Unit, input.substring(1))
     else
         Result.Err("'a'", input)
 
 fun string(s: String): Parser<Unit> = { input ->
     if (input.isNotEmpty() && input.substring(0 until s.length) == s)
-        Result.Ok(Pair(Unit, input.substring(s.length)))
+        Result.Ok(Unit, input.substring(s.length))
     else
         Result.Err("'$s'", input)
 }
 
-fun integer(input: String): ParseResult<Int> {
+fun integer(input: String): Result<Int> {
     if (input.isEmpty() || !input[0].isDigit()) {
         return Result.Err("an integer", input)
     } else {
@@ -33,14 +32,14 @@ fun integer(input: String): ParseResult<Int> {
             if (input[i].isDigit()) {
                 value = (value * 10) + (input[i] - '0')
             } else {
-                return Result.Ok(Pair(value, input.substring(i)))
+                return Result.Ok(value, input.substring(i))
             }
         }
-        return Result.Ok(Pair(value, ""))
+        return Result.Ok(value, "")
     }
 }
 
-fun quotedString(input: String): ParseResult<String> {
+fun quotedString(input: String): Result<String> {
     if (input.isEmpty() || input[0] != '"') {
         return Result.Err("a quoted string", input)
     }
@@ -51,28 +50,28 @@ fun quotedString(input: String): ParseResult<String> {
         val c = input[i]
         when {
             c == '"' && !escaped ->
-                return Result.Ok(Pair(string, input.substring(i + 1)))
+                return Result.Ok(string, input.substring(i + 1))
             c == '\\' && !escaped ->
                 escaped = true
             else -> {
-                if (escaped) string += '\\'
+                if (escaped && c != '\\') string += '\\'
                 escaped = false
                 string += c
             }
         }
     }
 
-    return Result.Err("a terminated quoted string",input)
+    return Result.Err("a terminated quoted string", input)
 }
 
-fun <T, U> ParseResult<T>.map(f: (T) -> U): ParseResult<U> = when (this) {
+fun <T, U> Result<T>.map(f: (T) -> U): Result<U> = when (this) {
     is Result.Err -> Result.Err(expected, actual)
-    is Result.Ok -> Result.Ok(Pair(f(value.first), value.second))
+    is Result.Ok -> Result.Ok(f(value), remaining)
 }
 
-fun <T, U> ParseResult<T>.flatMap(f: (T, String) -> ParseResult<U>): ParseResult<U> = when (this) {
+fun <T, U> Result<T>.flatMap(f: (T, String) -> Result<U>): Result<U> = when (this) {
     is Result.Err -> Result.Err(expected, actual)
-    is Result.Ok -> f(value.first, value.second)
+    is Result.Ok -> f(value, remaining)
 }
 
 fun <T, U> Parser<T>.map(f: (T) -> U): Parser<U> = { input ->
@@ -86,6 +85,18 @@ fun <T, U> Parser<T>.retn(value: U): Parser<U> = { input ->
 fun <P1, P2> seq(p1: Parser<P1>, p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
     p1(input).flatMap { r1, rest1 ->
         p2(rest1).map { r2 -> Pair(r1, r2) }
+    }
+}
+
+fun <P1, P2> seqUnrolled(p1: Parser<P1>, p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
+    when (val r1 = p1(input)) {
+        is Result.Err -> Result.Err(r1.expected, r1.actual)
+        is Result.Ok -> {
+            when (val r2 = p2(r1.remaining)) {
+                is Result.Err -> Result.Err(r2.expected, r2.actual)
+                is Result.Ok -> Result.Ok(Pair(r1.value, r2.value), r2.remaining)
+            }
+        }
     }
 }
 
@@ -108,12 +119,32 @@ fun <T> Parser<T>.many(): Parser<List<T>> = { input ->
     while (remaining.isNotEmpty()) {
         val r = this@many(remaining)
         if (r is Result.Ok) {
-            list += r.value.first
-            remaining = r.value.second
+            list += r.value
+            remaining = r.remaining
         } else
             break
     }
-    Result.Ok(Pair(list, remaining))
+    Result.Ok(list, remaining)
+}
+
+fun <T> Parser<T>.atLeastOne(): Parser<List<T>> = { input ->
+    when (val r = this@atLeastOne(input)) {
+        is Result.Err ->
+            r.map(::listOf).mapExpected { e -> "at least one $e" }
+        is Result.Ok -> {
+            val list = mutableListOf(r.value)
+            var remaining = r.remaining
+            while (remaining.isNotEmpty()) {
+                val r = this@atLeastOne(remaining)
+                if (r is Result.Ok) {
+                    list += r.value
+                    remaining = r.remaining
+                } else
+                    break
+            }
+            Result.Ok(list, remaining)
+        }
+    }
 }
 
 fun <T, X> Parser<T>.sepBy(sep: Parser<X>): Parser<List<T>> = { input ->
@@ -122,30 +153,33 @@ fun <T, X> Parser<T>.sepBy(sep: Parser<X>): Parser<List<T>> = { input ->
     while (remaining.isNotEmpty()) {
         val r = this@sepBy(remaining)
         if (r is Result.Ok) {
-            list += r.value.first
-            remaining = r.value.second
+            list += r.value
+            remaining = r.remaining
             val s = sep(remaining)
             if (s is Result.Ok)
-                remaining = s.value.second
+                remaining = s.remaining
             else
                 break
         } else
             break
     }
-    Result.Ok(Pair(list, remaining))
+    Result.Ok(list, remaining)
 }
 
-fun whitespace(input: String): ParseResult<Unit> {
+fun whitespace(input: String): Result<Unit> {
     for (i in 0 until input.length) {
         if (!input[i].isWhitespace())
-            return Result.Ok(Pair(Unit, input.substring(i)))
+            return Result.Ok(Unit, input.substring(i))
     }
-    return Result.Ok(Pair(Unit, input))
+    return Result.Ok(Unit, input)
 }
 
 class ParserRef<T> {
     lateinit var p: Parser<T>
-    fun set(p: Parser<T>) { this.p = p }
+    fun set(p: Parser<T>) {
+        this.p = p
+    }
+
     fun get(): Parser<T> = { input -> p(input) }
 }
 

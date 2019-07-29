@@ -1,13 +1,15 @@
 Parser Combinators Talk
 
 1. Intro
+    - so you need to write a parser?
     - primitive string operations
     - regexs
     - lex, yacc, JavaCC etc
+    - none of the above
 
 2. What is a parser?
     - function from string to structured data
-    - "structure" implies not all strings are valid
+    - structure implies not all strings are valid
     - needs the possibility of failure
     - Result<T> type
 
@@ -16,7 +18,7 @@ Parser Combinators Talk
     - implement first with simple Unit result
     - write test
     - discuss need for remaining string for combining parsers
-    - refactor result type to Pair<Unit, String>
+    - refactor result type to including remaining input on Ok
 
 4. More interesting parsers
     - string() amd integer()

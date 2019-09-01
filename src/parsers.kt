@@ -78,18 +78,22 @@ fun <T, U> Parser<T>.map(f: (T) -> U): Parser<U> = { input ->
     this@map(input).map(f)
 }
 
-fun <T, U> Parser<T>.retn(value: U): Parser<U> = { input ->
-    this@retn(input).map { value }
+fun <T, U> Parser<T>.flatMap(f: (T) -> Parser<U>): Parser<U> = { input ->
+    this@flatMap(input).flatMap { r1, rest -> f(r1)(rest) }
 }
 
-fun <P1, P2> seq(p1: Parser<P1>, p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
-    p1(input).flatMap { r1, rest1 ->
+infix fun <T, U> Parser<T>.meaning(value: U): Parser<U> = { input ->
+    this@meaning(input).map { value }
+}
+
+infix fun <P1, P2> Parser<P1>.then(p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
+    this@then(input).flatMap { r1, rest1 ->
         p2(rest1).map { r2 -> Pair(r1, r2) }
     }
 }
 
-fun <P1, P2> seqUnrolled(p1: Parser<P1>, p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
-    when (val r1 = p1(input)) {
+infix fun <P1, P2> Parser<P1>.thenUnrolled(p2: Parser<P2>): Parser<Pair<P1, P2>> = { input ->
+    when (val r1 = this@thenUnrolled(input)) {
         is Result.Err -> Result.Err(r1.expected, r1.actual)
         is Result.Ok -> {
             when (val r2 = p2(r1.remaining)) {
@@ -100,18 +104,37 @@ fun <P1, P2> seqUnrolled(p1: Parser<P1>, p2: Parser<P2>): Parser<Pair<P1, P2>> =
     }
 }
 
-fun <P> choice(p1: Parser<P>, p2: Parser<P>): Parser<P> = { input ->
-    when (val r1 = p1(input)) {
+infix fun <P> Parser<P>.or(p2: Parser<P>): Parser<P> = { input ->
+    when (val r1 = this@or(input)) {
         is Result.Ok -> r1
         is Result.Err -> p2(input).mapExpected { e2 -> "${r1.expected} or $e2" }
     }
 }
 
-fun <X, T> Parser<X>.before(p: Parser<T>): Parser<T> = seq(this@before, p).map { it.second }
-fun <T, X> Parser<T>.then(p: Parser<X>): Parser<T> = seq(this@then, p).map { it.first }
+infix fun <X, T> Parser<X>.before(p: Parser<T>): Parser<T> = (this@before then p).map { it.second }
+infix fun <T, X> Parser<T>.followedBy(p: Parser<X>): Parser<T> = (this@followedBy then p).map { it.first }
 
 fun <T, X, Y> Parser<T>.between(p1: Parser<X>, p2: Parser<Y>): Parser<T> =
-    p1.before(this).then(p2)
+    p1 before this followedBy p2
+
+operator fun <T> Parser<T>.times(count: Int): Parser<List<T>> = { input ->
+    val list = mutableListOf<T>()
+    var remaining = input
+    var err: Result<List<T>>? = null
+    loop@for (i in 1..count) {
+        when (val r = this@times(remaining)) {
+            is Result.Ok -> {
+                list += r.value
+                remaining = r.remaining
+            }
+            is Result.Err -> {
+                err = r.map { listOf(it) }.mapExpected { "$count times $it" }
+                break@loop
+            }
+        }
+    }
+    err ?: Result.Ok(list.toList(), remaining)
+}
 
 fun <T> Parser<T>.many(): Parser<List<T>> = { input ->
     val list = mutableListOf<T>()
@@ -147,7 +170,7 @@ fun <T> Parser<T>.atLeastOne(): Parser<List<T>> = { input ->
     }
 }
 
-fun <T, X> Parser<T>.sepBy(sep: Parser<X>): Parser<List<T>> = { input ->
+infix fun <T, X> Parser<T>.sepBy(sep: Parser<X>): Parser<List<T>> = { input ->
     val list = mutableListOf<T>()
     var remaining = input
     while (remaining.isNotEmpty()) {
@@ -182,6 +205,3 @@ class ParserRef<T> {
 
     fun get(): Parser<T> = { input -> p(input) }
 }
-
-infix fun <T> Parser<T>.or(p: Parser<T>): Parser<T> = choice(this, p)
-infix fun <T, U> Parser<T>.and(p: Parser<U>): Parser<Pair<T, U>> = seq(this, p)

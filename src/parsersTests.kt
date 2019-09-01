@@ -2,15 +2,15 @@ import io.kotlintest.matchers.shouldBe
 import io.kotlintest.specs.StringSpec
 
 sealed class JSON {
-    object Null: JSON()
-    data class Bool(val value: Boolean): JSON()
-    data class Number(val value: Int): JSON()
-    data class String(val value: kotlin.String): JSON()
-    data class Array(val value: List<JSON>): JSON()
-    data class Object(val value: Map<kotlin.String, JSON>): JSON()
+    object Null : JSON()
+    data class Bool(val value: Boolean) : JSON()
+    data class Number(val value: Int) : JSON()
+    data class String(val value: kotlin.String) : JSON()
+    data class Array(val value: List<JSON>) : JSON()
+    data class Object(val value: Map<kotlin.String, JSON>) : JSON()
 }
 
-class ParsersTests: StringSpec({
+class ParsersTests : StringSpec({
 
     "theLetterA" {
         theLetterA("aaa") shouldBe Result.Ok(Unit, "aa")
@@ -38,30 +38,28 @@ class ParsersTests: StringSpec({
         quotedString("") shouldBe Result.Err<Pair<String, String>>("a quoted string", "")
     }
 
-    "seq" {
-        seq(::theLetterA, ::theLetterA)("aab") shouldBe Result.Ok(Pair(Unit, Unit), "b")
+    "then" {
+        val p = ::theLetterA then ::theLetterA
+        p("aab") shouldBe Result.Ok(Pair(Unit, Unit), "b")
     }
 
     "choice" {
-        val p = choice(
-            string("a").retn(1),
-            string("b").retn(2)
-        )
+        val p = string("a").meaning(1) or string("b").meaning(2)
         p("a") shouldBe Result.Ok(1, "")
         p("b") shouldBe Result.Ok(2, "")
         p("c") shouldBe Result.Err<Pair<Int, String>>("'a' or 'b'", "c")
     }
 
     "before" {
-        val foo = string("foo").retn(1)
-        val bar = string("bar").retn(2)
-        foo.before(bar)("foobar") shouldBe Result.Ok(2, "")
+        val foo = string("foo") meaning 1
+        val bar = string("bar") meaning 2
+        (foo before bar)("foobar") shouldBe Result.Ok(2, "")
     }
 
-    "then" {
-        val foo = string("foo").retn(1)
-        val bar = string("bar").retn(2)
-        foo.then(bar)("foobar") shouldBe Result.Ok(1, "")
+    "followedBy" {
+        val foo = string("foo") meaning 1
+        val bar = string("bar") meaning 2
+        (foo followedBy bar)("foobar") shouldBe Result.Ok(1, "")
     }
 
     "between" {
@@ -78,52 +76,67 @@ class ParsersTests: StringSpec({
     }
 
     "sepBy" {
-        ::integer.sepBy(string(","))("1,2,3,4") shouldBe Result.Ok(listOf(1,2,3,4), "")
-        ::integer.sepBy(string(","))("1,2,3,4x") shouldBe Result.Ok(listOf(1,2,3,4), "x")
+        (::integer sepBy string(","))("1,2,3,4") shouldBe Result.Ok(listOf(1, 2, 3, 4), "")
+        (::integer sepBy string(","))("1,2,3,4x") shouldBe Result.Ok(listOf(1, 2, 3, 4), "x")
+    }
+
+    "flatMap" {
+        val counted = (::integer followedBy string(":")).flatMap { count ->
+            (::integer followedBy ::whitespace) * count
+        }
+
+        counted("3:4 5 6") shouldBe Result.Ok(listOf(4,5,6), "")
+        counted("3:4 5 6 7") shouldBe Result.Ok(listOf(4,5,6), "7")
+        counted("3:4 5 foo") shouldBe Result.Err<List<Int>>("3 times an integer", "foo")
     }
 
     "json" {
         val jsonParserRef = ParserRef<JSON>()
 
-        val jsonNull: Parser<JSON> = string("null").retn(JSON.Null)
-        val jsonTrue: Parser<JSON> = string("true").retn(JSON.Bool(true))
-        val jsonFalse: Parser<JSON> = string("false").retn(JSON.Bool(false))
+        val jsonNull: Parser<JSON> = string("null") meaning JSON.Null
+        val jsonTrue: Parser<JSON> = string("true") meaning JSON.Bool(true)
+        val jsonFalse: Parser<JSON> = string("false") meaning JSON.Bool(false)
         val jsonNumber: Parser<JSON> = ::integer.map(JSON::Number)
         val jsonString: Parser<JSON> = ::quotedString.map(JSON::String)
 
         fun token(s: String): Parser<Unit> = string(s).between(::whitespace, ::whitespace)
 
-        val jsonArray: Parser<JSON> = jsonParserRef.get()
-            .sepBy(token(","))
+        val jsonArray: Parser<JSON> = (jsonParserRef.get() sepBy token(","))
             .between(token("["), token("]"))
             .map(JSON::Array)
 
-        val jsonObject: Parser<JSON> =
-            (::quotedString.then(token(":")) and jsonParserRef.get())
-            .sepBy(token(","))
-            .between(token("{"), token("}"))
-            .map { pairs -> JSON.Object(pairs.toMap()) }
+        val jsonKeyValuePair = ::quotedString.followedBy(token(":")) then jsonParserRef.get()
+
+        val jsonObject: Parser<JSON> = (jsonKeyValuePair sepBy token(","))
+                .between(token("{"), token("}"))
+                .map { pairs -> JSON.Object(pairs.toMap()) }
 
         val json = (jsonNull or jsonTrue or jsonFalse or jsonNumber or jsonString or jsonArray or jsonObject)
             .apply(jsonParserRef::set)
 
-        json("""{
+        json(
+            """{
             "foo": "bar",
             "number": 123,
             "array": [1,2,3],
             "objs": [{"a": true}, {"b": false}],
             "nothing": null
-        }""") shouldBe Result.Ok(
-            JSON.Object(mapOf(
-                "foo" to JSON.String("bar"),
-                "number" to JSON.Number(123),
-                "array" to JSON.Array(listOf(JSON.Number(1), JSON.Number(2), JSON.Number(3))),
-                "objs" to JSON.Array(listOf(
-                    JSON.Object(mapOf("a" to JSON.Bool(true))),
-                    JSON.Object(mapOf("b" to JSON.Bool(false)))
-                )),
-                "nothing" to JSON.Null
-            )),
+        }"""
+        ) shouldBe Result.Ok(
+            JSON.Object(
+                mapOf(
+                    "foo" to JSON.String("bar"),
+                    "number" to JSON.Number(123),
+                    "array" to JSON.Array(listOf(JSON.Number(1), JSON.Number(2), JSON.Number(3))),
+                    "objs" to JSON.Array(
+                        listOf(
+                            JSON.Object(mapOf("a" to JSON.Bool(true))),
+                            JSON.Object(mapOf("b" to JSON.Bool(false)))
+                        )
+                    ),
+                    "nothing" to JSON.Null
+                )
+            ),
             ""
         )
     }

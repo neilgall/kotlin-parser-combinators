@@ -14,28 +14,28 @@ class ParsersTests : StringSpec({
 
     "theLetterA" {
         theLetterA("aaa") shouldBe Result.Ok(Unit, "aa")
-        theLetterA("baa") shouldBe Result.Err<Pair<Unit, String>>("'a'", "baa")
+        theLetterA("baa") shouldBe Result.Err<String, Pair<Unit, String>>("'a'", "baa")
     }
 
     "string" {
         val p = string("foo")
         p("foobar") shouldBe Result.Ok(Unit, "bar")
-        p("barfoo") shouldBe Result.Err<Pair<Unit, String>>("'foo'", "barfoo")
+        p("barfoo") shouldBe Result.Err<String, Pair<Unit, String>>("'foo'", "barfoo")
     }
 
     "integer" {
         integer("123") shouldBe Result.Ok(123, "")
         integer("123foo") shouldBe Result.Ok(123, "foo")
-        integer("foo") shouldBe Result.Err<Pair<Int, String>>("an integer", "foo")
-        integer("") shouldBe Result.Err<Pair<Int, String>>("an integer", "")
+        integer("foo") shouldBe Result.Err<String, Pair<Int, String>>("an integer", "foo")
+        integer("") shouldBe Result.Err<String, Pair<Int, String>>("an integer", "")
     }
 
     "quotedString" {
-        quotedString("foo") shouldBe Result.Err<Pair<String, String>>("a quoted string", "foo")
+        quotedString("foo") shouldBe Result.Err<String, Pair<String, String>>("a quoted string", "foo")
         quotedString("\"foo\"") shouldBe Result.Ok("foo", "")
         quotedString("\"foo\"bar") shouldBe Result.Ok("foo", "bar")
         quotedString("\"\"") shouldBe Result.Ok("", "")
-        quotedString("") shouldBe Result.Err<Pair<String, String>>("a quoted string", "")
+        quotedString("") shouldBe Result.Err<String, Pair<String, String>>("a quoted string", "")
     }
 
     "then" {
@@ -47,7 +47,7 @@ class ParsersTests : StringSpec({
         val p = string("a").meaning(1) or string("b").meaning(2)
         p("a") shouldBe Result.Ok(1, "")
         p("b") shouldBe Result.Ok(2, "")
-        p("c") shouldBe Result.Err<Pair<Int, String>>("'a' or 'b'", "c")
+        p("c") shouldBe Result.Err<String, Pair<Int, String>>("'a' or 'b'", "c")
     }
 
     "before" {
@@ -76,8 +76,8 @@ class ParsersTests : StringSpec({
     }
 
     "sepBy" {
-        (::integer sepBy string(","))("1,2,3,4") shouldBe Result.Ok(listOf(1, 2, 3, 4), "")
-        (::integer sepBy string(","))("1,2,3,4x") shouldBe Result.Ok(listOf(1, 2, 3, 4), "x")
+        (::integer separatedBy string(","))("1,2,3,4") shouldBe Result.Ok(listOf(1, 2, 3, 4), "")
+        (::integer separatedBy string(","))("1,2,3,4x") shouldBe Result.Ok(listOf(1, 2, 3, 4), "x")
     }
 
     "flatMap" {
@@ -87,27 +87,27 @@ class ParsersTests : StringSpec({
 
         counted("3:4 5 6") shouldBe Result.Ok(listOf(4,5,6), "")
         counted("3:4 5 6 7") shouldBe Result.Ok(listOf(4,5,6), "7")
-        counted("3:4 5 foo") shouldBe Result.Err<List<Int>>("3 times an integer", "foo")
+        counted("3:4 5 foo") shouldBe Result.Err<String, List<Int>>("3 times an integer", "foo")
     }
 
     "json" {
-        val jsonParserRef = ParserRef<JSON>()
+        val jsonParserRef = ParserRef<String, JSON>()
 
-        val jsonNull: Parser<JSON> = string("null") meaning JSON.Null
-        val jsonTrue: Parser<JSON> = string("true") meaning JSON.Bool(true)
-        val jsonFalse: Parser<JSON> = string("false") meaning JSON.Bool(false)
-        val jsonNumber: Parser<JSON> = ::integer.map(JSON::Number)
-        val jsonString: Parser<JSON> = ::quotedString.map(JSON::String)
+        val jsonNull: Parser<String, JSON> = string("null") meaning JSON.Null
+        val jsonTrue: Parser<String, JSON> = string("true") meaning JSON.Bool(true)
+        val jsonFalse: Parser<String, JSON> = string("false") meaning JSON.Bool(false)
+        val jsonNumber: Parser<String, JSON> = ::integer.map(JSON::Number)
+        val jsonString: Parser<String, JSON> = ::quotedString.map(JSON::String)
 
-        fun token(s: String): Parser<Unit> = string(s).between(::whitespace, ::whitespace)
+        fun token(s: String): Parser<String, Unit> = string(s).between(::whitespace, ::whitespace)
 
-        val jsonArray: Parser<JSON> = (jsonParserRef.get() sepBy token(","))
+        val jsonArray: Parser<String, JSON> = (jsonParserRef.get() separatedBy token(","))
             .between(token("["), token("]"))
             .map(JSON::Array)
 
         val jsonKeyValuePair = ::quotedString.followedBy(token(":")) then jsonParserRef.get()
 
-        val jsonObject: Parser<JSON> = (jsonKeyValuePair sepBy token(","))
+        val jsonObject: Parser<String, JSON> = (jsonKeyValuePair separatedBy token(","))
                 .between(token("{"), token("}"))
                 .map { pairs -> JSON.Object(pairs.toMap()) }
 
@@ -139,5 +139,11 @@ class ParsersTests : StringSpec({
             ),
             ""
         )
+    }
+
+    "tokeniser" {
+        val tokens: Parser<String, List<String>> = ::nonWhitespace separatedBy ::whitespace
+
+        tokens("foo bar   a \t b 123\n\n") == listOf("foo", "bar", "a", "b", "123")
     }
 })

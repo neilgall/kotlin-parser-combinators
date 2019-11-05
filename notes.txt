@@ -5,33 +5,28 @@ Parser Combinators Talk
     - primitive string operations
     - regexs
     - lex, yacc, JavaCC etc
-    - none of the above
+    - simple idea from functional programming
 
-2. What is a parser?
-    - function from string to structured data
-    - structure implies not all strings are valid
-    - needs the possibility of failure
-    - Result<T> type
-
-3. What is the simplest parser we can think of?
-    - theLetterA
-    - implement first with simple Unit result
+2. What is the simplest parser we can think of?
+    - dot
+    - implement first with bool result
     - write test
+    - discuss lack of information in bool result
     - discuss need for remaining string for combining parsers
     - refactor result type to including remaining input on Ok
 
-4. More interesting parsers
+3. More interesting parsers
     - string() amd integer()
     - quotedString()
     - test
 
-5. Take stock
+4. Take stock
     - what have we so far?
     - lots of repetition in result types
-    - add ParseResult<T> and Parser<T> type aliases
+    - add Parser<T> type aliases
     - refactor
 
-6. Combining Parsers
+5. Combining Parsers
     - what does it mean to combine parsers?
     - discuss semantics of sequence
     - what would a function that combines two parsers look like?
@@ -41,30 +36,35 @@ Parser Combinators Talk
     - add tests
     - discuss patterns in unrolled code
     - factor out inner `when` to ParseResult.map()
-    - note that ParseResult is acting as a Functor
-    - factor out outer `when` to ParseResult.flatMap()
+    - note that Result is acting as a Functor
+    - factor out outer `when` to Result.flatMap()
     - note that ParseResult is acting as a Monad
     - discuss naming of flatMap()
     - rerun tests
 
-7. Choice
+6. Choice
     - the other main combinator is choice
     - both branches must yield the same type
     - implement and add positive tests
     - note that return values are the same for both branches
     - discuss adding result data to `string()`
-    - add `Parser.retn()`
+    - add `Parser.means()`
     - discuss extension on function type
-    - modify test to use `retn()`
+    - modify test to use `means()`
     - add a failing test case with 'a or b' expect message
     - implement and use `mapExpected`
 
+7. Take advantage of Kotlin
+    - `seq` can become infix `then`
+    - `choice` can be come infix `or`
+
 8. Other combinators
-    - before
+    - before    
     - then
     - between
     - many
     - sepBy
+    - whitespace
 
 9. Parsing JSON
     - add JSON model
@@ -73,8 +73,7 @@ Parser Combinators Talk
     - start on array
     - stub array item to start with; focus on sepBy, between
     - we need the "full" json parser for items
-    - seems like a disaster but there's a simple fix
-    - ParserRef<T>
+    - seems like a disaster but there's a simple fix in `LazyParser<T>`
     - object parser is similar
     - finally add the full JSON parser
     - remember to set ref
